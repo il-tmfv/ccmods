@@ -22,12 +22,18 @@ function entriesOf(dir: string) {
   })
 }
 
-function stubFs(on: (name: string, hook: (...args: any[]) => unknown) => unknown, submitted: string[] = []) {
+function stubFs(on: (name: string, hook: (...args: any[]) => unknown) => unknown, submitted: string[] = [], broken: string[] = []) {
   on('session.root', () => ({ value: ROOT }))
   on('env.get', () => ({ value: HOME }))
   on('fs.exists', ($: unknown, e: { path: string }) => ({ value: entriesOf(e.path).length > 0 }))
-  on('fs.list', ($: unknown, e: { path: string }) => ({ value: entriesOf(e.path) }))
-  on('fs.read', ($: unknown, e: { path: string }) => ({ value: FILES[e.path] ?? '' }))
+  on('fs.list', ($: unknown, e: { path: string }) => {
+    if (broken.includes(e.path)) throw new Error('EACCES')
+    return { value: entriesOf(e.path) }
+  })
+  on('fs.read', ($: unknown, e: { path: string }) => {
+    if (broken.includes(e.path)) throw new Error('EACCES')
+    return { value: FILES[e.path] ?? '' }
+  })
   on('command.register', () => ({ value: undefined }))
   on('prompt.submit', ($: unknown, e: { text: string }) => {
     submitted.push(e.text)
@@ -71,4 +77,22 @@ test('a cursor command runs as a prompt, project before user, with args appended
   await clock.advance(1)
   expect(submitted[0]).toBe('# Review the diff\n\nReview the current diff.\n\nPR 12')
   expect(submitted[1]).toBe('Ship it.')
+})
+
+test('an unreadable rule file does not hide the other rules', async ($, on) => {
+  stubFs(on, [], [`${ROOT}/.cursor/rules/pagination.mdc`])
+  const context = await $.prompt.context({ blocks: [] })
+  const text = context.blocks.find((block: { name: string }) => block.name === 'cursorRules')?.text ?? ''
+  expect(text).toContain('Always be terse.')
+  expect(text).not.toContain('Prefer Kaminari')
+})
+
+test('an unreadable user commands directory does not stop the project commands', async ($, on) => {
+  const submitted: string[] = []
+  stubFs(on, submitted, [`${HOME}/.cursor/commands`])
+  const clock = mock.clock(on)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: ROOT })
+  await $.command.run({ command: 'review', args: '' })
+  await clock.advance(1)
+  expect(submitted[0]).toBe('# Review the diff\n\nReview the current diff.')
 })

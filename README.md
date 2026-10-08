@@ -49,7 +49,7 @@ Makes Claude Code read what a repo keeps for Cursor, with no converter and nothi
 | Cursor | What Claude Code gets |
 | --- | --- |
 | `.cursor/rules/*.mdc` with `alwaysApply: true` | The rule text in the first message of each conversation |
-| `.cursor/rules/*.mdc` with `globs` | The rule text, attached to the first `Read`, `Edit` or `Write` of a matching file |
+| `.cursor/rules/*.mdc` with `globs` | The rule text, attached to the result of the first `Read`, `Edit` or `Write` of a matching file. It arrives after the tool has run, so a `Write` of a new file with no earlier `Read` sees the rule only afterward |
 | `.cursor/rules/*.mdc` with only `description` | A one-line index in the first message. Claude opens the file when the task matches |
 | `.cursor/commands/*.md` in the project | A `/name` slash command that sends the file as your prompt. Text after the name is appended |
 | `~/.cursor/commands/*.md` | The same, in every project. A project command wins over a user one with the same name |

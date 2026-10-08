@@ -110,7 +110,14 @@ export function globToRegExp(glob: string): RegExp {
 }
 
 export function matchesGlobs(globs: readonly string[], relativePath: string): boolean {
-  return globs.some(glob => globToRegExp(glob.replace(/^\.?\//, '')).test(relativePath))
+  return globs.some(glob => {
+    try {
+      return globToRegExp(glob.replace(/^\.?\//, '')).test(relativePath)
+    } catch {
+      // A malformed glob (say an unclosed `{`) matches nothing instead of failing the whole lookup
+      return false
+    }
+  })
 }
 
 export function commandDescription(body: string): string {

@@ -14,7 +14,13 @@ const commands = new Map<string, string>()
 async function loadRules($: EngineInterface, dir: string, depth = 0): Promise<Rule[]> {
   if (depth === 0 && !(await $.fs.exists(dir))) return []
   const rules: Rule[] = []
-  for (const entry of await $.fs.list(dir)) {
+  let entries: Awaited<ReturnType<typeof $.fs.list>>
+  try {
+    entries = await $.fs.list(dir)
+  } catch {
+    return rules
+  }
+  for (const entry of entries) {
     const path = `${dir}/${entry.name}`
     if (entry.kind === 'dir' && depth < MAX_DEPTH) {
       rules.push(...(await loadRules($, path, depth + 1)))
@@ -24,9 +30,13 @@ async function loadRules($: EngineInterface, dir: string, depth = 0): Promise<Ru
         rules.push(cached.rule)
         continue
       }
-      const rule = parseRule(path, entry.name.replace(RULE_FILE, ''), await $.fs.read(path))
-      cache.set(path, { mtimeMs: entry.mtimeMs, rule })
-      rules.push(rule)
+      try {
+        const rule = parseRule(path, entry.name.replace(RULE_FILE, ''), await $.fs.read(path))
+        cache.set(path, { mtimeMs: entry.mtimeMs, rule })
+        rules.push(rule)
+      } catch {
+        // An unreadable rule file is skipped; the others still load
+      }
     }
   }
   return rules
@@ -38,7 +48,9 @@ function render(rule: Rule, root: string): string {
 }
 
 export const register: Register = on => {
-  // Rules that are always on, plus a one-line index of rules Claude may open on its own
+  // Rules that are always on, plus a one-line index of rules Claude may open on its own.
+  // The host fires this once per conversation, so no dedupe is needed here; `applied` only
+  // keeps a rule that has both alwaysApply and globs from being handed over a second time
   on('prompt.context', async ($, e, next) => {
     const base = await next(e)
     try {
@@ -59,7 +71,9 @@ export const register: Register = on => {
     }
   }).catch(($, e, next) => next(e))
 
-  // Glob rules load the first time Claude touches a matching file, as native path rules do
+  // Glob rules load the first time Claude touches a matching file, as native path rules do.
+  // The host attaches `context` to the tool's result, so it arrives after the call has run:
+  // a Write to a new file with no earlier Read sees the rule only once the file exists
   on('tool.call', { tool: ['Read', 'Edit', 'Write'] }, async ($, e, next) => {
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError === true) return ran
@@ -96,8 +110,15 @@ export const register: Register = on => {
     const dirs = [`${await $.session.root()}/.cursor/commands`, ...(home === undefined ? [] : [`${home}/.cursor/commands`])]
     commands.clear()
     for (const dir of dirs) {
-      if (!(await $.fs.exists(dir))) continue
-      for (const entry of await $.fs.list(dir)) {
+      let entries: Awaited<ReturnType<typeof $.fs.list>>
+      try {
+        if (!(await $.fs.exists(dir))) continue
+        entries = await $.fs.list(dir)
+      } catch {
+        // An unreadable commands directory is skipped; the other one still loads
+        continue
+      }
+      for (const entry of entries) {
         const name = commandName(entry.name)
         if (entry.kind !== 'file' || !entry.name.endsWith('.md') || name === undefined || commands.has(name)) continue
         try {
@@ -110,7 +131,7 @@ export const register: Register = on => {
       }
     }
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
 
   on('command.run', async ($, e, next) => {
     const file = commands.get(e.command)

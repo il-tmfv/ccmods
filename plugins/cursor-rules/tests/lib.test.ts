@@ -57,3 +57,8 @@ test('command names and descriptions', () => {
   expect(commandName('bad name.md')).toBeUndefined()
   expect(commandDescription('\n# Review the PR\nmore')).toBe('Review the PR')
 })
+
+test('a malformed glob matches nothing and does not hide the others', () => {
+  expect(matchesGlobs(['src/{a,b', '*.rb'], 'app/user.rb')).toBe(true)
+  expect(matchesGlobs(['src/{a,b'], 'src/a')).toBe(false)
+})
