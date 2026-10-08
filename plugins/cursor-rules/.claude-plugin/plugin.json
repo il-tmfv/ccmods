@@ -1,0 +1,6 @@
+{
+  "name": "cursor-rules",
+  "version": "0.1.0",
+  "author": { "name": "il-tmfv" },
+  "description": "Load .cursor/rules and .cursor/commands as native Claude Code rules and slash commands"
+}

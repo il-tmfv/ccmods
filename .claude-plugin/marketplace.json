@@ -1,5 +1,12 @@
 {
   "name": "ccmods",
   "owner": { "name": "il-tmfv" },
-  "plugins": []
+  "metadata": { "description": "Personal Claude Code mods" },
+  "plugins": [
+    {
+      "name": "cursor-rules",
+      "source": "./plugins/cursor-rules",
+      "description": "Load .cursor/rules and .cursor/commands as native Claude Code rules and slash commands"
+    }
+  ]
 }
